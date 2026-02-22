@@ -1,78 +1,133 @@
-# Delivery Failure Analysis System - Solution Design
+# Delivery Failure Analysis System – Solution Design (AI-Powered)
 
 ## 1. Problem Overview
-Logistics operations suffer from data silos. Order data, fleet logs, warehouse records, and external factors (weather/traffic) exist in separate systems, making it difficult to understand *why* a delivery failed or was delayed. This solution aims to aggregate these disparate data sources to provide automated, actionable insights.
+
+Logistics operations suffer from data silos. Order data, fleet logs, warehouse records, and external
+factors (weather/traffic) exist in separate systems, making it difficult to understand *why* a
+delivery failed or was delayed. This solution aggregates these disparate data sources and uses a
+Large Language Model (LLM) to provide automated, human-readable, actionable insights.
+
+---
 
 ## 2. Solution Approach
 
-The solution is a Python-based analytics engine that performs three key functions:
+The solution is a Python-based analytics engine with three layers:
 
-1.  **Data Aggregation**: Ingests structured data (CSVs) from multiple domains (Orders, Fleet, Warehouse, Clients, Weather) and joins them into a unified "Order Journey" dataset.
-2.  **Event Correlation**: Time-aligns and links events. For example, matching a "Late" delivery status with a "Heavy Rain" weather record or a "Breakdown" fleet log for that specific order ID.
-3.  **Insight Generation**: Applies heuristics to categorize failure reasons and surfaces them through an interactive Natural Language Interface (CLI) and comprehensive reports.
+1. **Data Aggregation** – Ingests structured CSVs (Orders, Fleet, Warehouse, Weather, Feedback) and
+   joins them into a unified "Order Journey" dataset.
+2. **Event Correlation** – Time-aligns and links events (e.g., matching a "Late" delivery with a
+   "Heavy Rain" weather record for the same `order_id`).
+3. **AI-Powered Insight Generation** – Uses Google Gemini for two distinct tasks:
+   - **Intent Parsing**: Interprets *any* free-form natural language question into structured
+     query parameters (city, client, warehouse, order ID, time range).
+   - **Narrative Generation**: Converts filtered data summaries into clear, human-readable
+     explanations with root-cause analysis and actionable recommendations.
+   - **SDK**: `google-genai`. **Default model**: `gemini-2.5-flash`. Configurable via
+     `GEMINI_MODEL` environment variable (e.g. `gemini-2.0-flash`, `gemini-2.5-flash-lite`).
+
+---
 
 ## 3. System Architecture
 
-The following diagram illustrates the data flow and component interaction:
-
-```mermaid
-graph TD
-    subgraph "Data Sources (CSVs)"
-        Orders[Orders Data]
-        Fleet[Fleet Logs]
-        WH[Warehouse Logs]
-        Weather[Weather & Traffic]
-        Feedback[Customer Feedback]
-    end
-
-    subgraph "Analytics Engine (Python)"
-        Ingest[Data Ingestion Module]
-        Merge[Aggregation Layer]
-        Logic[Correlation Logic]
-        NLP[Natural Language Parser]
-    end
-
-    subgraph "Outputs"
-        Report[Markdown Analysis Report]
-        CLI[Interactive CLI]
-    end
-
-    Orders --> Ingest
-    Fleet --> Ingest
-    WH --> Ingest
-    Weather --> Ingest
-    Feedback --> Ingest
-
-    Ingest --> Merge
-    Merge -->|"Unified DataFrame"| Logic
-    
-    Logic -->|"Enriched Data (Reasons)"| Report
-    Logic -->|"Enriched Data"| NLP
-    
-    User[User Query] -->|"why did order 123 fail?"| NLP
-    NLP -->|"Filtered Results"| CLI
 ```
+┌──────────────────────────────────────────────────────────────┐
+│                    Data Sources (CSVs)                        │
+│  orders · clients · fleet_logs · warehouse_logs              │
+│  weather · drivers · warehouses · feedback                   │
+└────────────────────────┬─────────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│              Analytics Engine (Python / pandas)               │
+│                                                               │
+│   1. Data Ingestion   →   2. Aggregation   →   3. Enrichment │
+│      (load_data)           (combine_data)      (enrich_data)  │
+│                                                               │
+│   Outputs: Unified DataFrame with consolidated_reason column  │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+          ┌─────────────┴──────────────┐
+          │                            │
+          ▼                            ▼
+┌─────────────────────┐    ┌───────────────────────────────────┐
+│  User Query (CLI)   │    │     AI Layer (Google Gemini)       │
+│                     │    │                                    │
+│  --ask "Why did     │───▶│  Step 1: llm_parse_intent()        │
+│   deliveries fail   │    │    → Returns structured JSON:      │
+│   in Mumbai?"       │    │      action, filters, cities,      │
+│                     │    │      order_id, time_range          │
+│  --filter_city      │    │                                    │
+│  --compare_cities   │    │  Step 2: Filter DataFrame          │
+│  --query_order      │    │    → Apply extracted parameters    │
+│  --show_insights    │    │                                    │
+│  --report           │    │  Step 3: llm_generate_narrative()  │
+└─────────────────────┘    │    → Converts data summary to      │
+                           │      human-readable analysis with  │
+                           │      root causes + recommendations  │
+                           └───────────────────────────────────┘
+```
+
+---
 
 ## 4. Key Components
 
-### A. Data Integration Strategy
-We use `orders.csv` as the central fact table. All other datasets are joined using `order_id` or entity IDs (`client_id`, `driver_id`, `warehouse_id`).
-*   **Conflict Resolution**: When multiple logs exist for an order (e.g., multiple GPS pings), we select the most relevant record (e.g., the last log before delivery) to capture the final status.
+### A. Data Integration
 
-### B. Root Cause Heuristics
-The system determines the "Consolidated Reason" for a failure by checking attributes in priority:
-1.  **Fleet Issues**: Is there a specific GPS delay note (e.g., "Vehicle Breakdown")?
-2.  **Warehouse Issues**: Is there a warehouse exception note (e.g., "Stockout")?
-3.  **External Factors**: Was the weather "Rain" or "Fog"? Was traffic "Heavy"?
-4.  **Customer Feedback**: Did the customer mention "Wrong Address"?
+`orders.csv` is the central fact table. All other datasets join via `order_id` (or `client_id`,
+`driver_id`, `warehouse_id`). Duplicate logs per order (multiple GPS pings, warehouse scans) are
+resolved by selecting the **latest** record via `groupby().last()`.
 
-### C. Natural Language Interface
-A lightweight logic-based parser maps user questions to system commands:
-*   *"Compare Mumbai and Delhi"* -> Triggers City Comparison module.
-*   *"Why did order 847 fail?"* -> Triggers Single Order Analysis.
-*   *"Top reasons for Warehouse 1"* -> Applies Warehouse Filters.
+### B. Root-Cause Heuristics (generate_reason)
 
-## 5. Potential Extensions
-*   **Real-time Ingestion**: Connect to Kafka/Database streams instead of static CSVs.
-*   **ML Prediction**: Train a classifier to predict *future* delays based on historical correlations.
-*   **Web Dashboard**: Visualize the insights using a frontend framework (React/Streamlit).
+Each order gets a `consolidated_reason` string built from a priority chain:
+
+1. `failure_reason` column (order-level failure label)
+2. `gps_delay_notes` (fleet/transit issues, e.g. "Address not found")
+3. `warehouse_notes` (stock delay, mis-pick, etc.)
+4. `weather_condition` (Rain, Fog, Storm)
+5. `traffic_condition` (Heavy, Jam)
+6. `event_type` (Strike, Festival, etc.)
+
+### C. LLM Intent Parser (`llm_parse_intent`)
+
+Instead of fragile regex/keyword matching, the user's question is sent to **Gemini** (default: gemini-2.5-flash)
+with a prompt that includes the actual list of cities, client names, and warehouse names from the
+dataset. The model returns structured JSON (via `response_mime_type="application/json"`), enabling
+it to handle **any phrasing** – not just pre-defined patterns.
+
+Example: *"What's going wrong with Saini's shipments this month?"* correctly maps to
+`{"action": "filter_analysis", "filters": {"client": "Saini"}, "time_range": "this month"}`.
+
+### D. LLM Narrative Generator (`llm_generate_narrative`)
+
+A concise data summary (totals, failure rates, top reasons, weather/traffic breakdowns) is sent to
+**Gemini** instructing it to act as a logistics analyst. The model returns:
+
+- A direct answer to the user's question
+- Key root causes with specific numbers
+- Severity-ranked issues
+- 2–3 actionable operational recommendations
+
+Output is **plain English prose** – no raw tables, no SQL, no markdown code blocks.
+
+---
+
+## 5. Why LLM over Rule-Based NLP?
+
+| Capability | Previous (Rule-Based) | New (LLM-Based) |
+|---|---|---|
+| Handles only predefined query patterns | ✅ Only known queries | ✅ Any natural language |
+| Entity extraction | Regex + exact string match | Semantic matching via LLM |
+| Output format | Raw pandas tables | Human-readable narrative |
+| Root cause explanation | Static template strings | Contextual LLM analysis |
+| Handles typos / paraphrasing | ❌ Breaks | ✅ Robust |
+| Actionable recommendations | ❌ None | ✅ Auto-generated |
+
+---
+
+## 6. Potential Extensions
+
+- **Real-time Ingestion**: Replace CSV reads with Kafka/database streams.
+- **Predictive Model**: Train a classifier on the enriched DataFrame to predict future delays.
+- **Web Dashboard**: Expose the engine via a FastAPI backend + React/Streamlit frontend.
+- **Multi-turn Chat**: Maintain conversation history for follow-up questions.

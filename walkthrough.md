@@ -1,85 +1,157 @@
-# Delivery Analytics System - Walkthrough
+# Delivery Analytics System – Walkthrough (AI-Powered Edition)
 
 ## Overview
-This system aggregates multi-domain logistics data to identify the root causes of delivery failures and delays. It provides an interactive command-line interface (CLI) to answer specific operational questions and generates comprehensive reports.
+
+This system aggregates multi-domain logistics data and uses **Google Gemini** to:
+- Understand *any* natural language question (not just pre-defined patterns)
+- Generate **human-readable, narrative explanations** instead of raw tables
+- Provide root-cause analysis and actionable recommendations
+
+---
 
 ## Prerequisites
-- Python 3.x
-- Dependencies installed:
-  ```bash
-  pip install -r requirements.txt
-  ```
 
-## command Cheat Sheet (Sample Use Cases)
+**1. Python 3.x**
 
-Here are the exact commands to run for the use cases defined in the assignment:
-
-### 1. General Analysis
-**"Ask questions in plain English (Natural Language)"**
-Use the `--ask` flag to query the system without remembering specific filters.
+**2. Install dependencies:**
 ```bash
-python delivery_analytics.py --ask "Why was order 123 late?"
-python delivery_analytics.py --ask "Compare Mumbai and New Delhi"
-python delivery_analytics.py --ask "What is wrong with Client Saini?"
+pip install -r requirements.txt
 ```
 
-**"Generate a full report and see top failure reasons."**
-```bash
-python delivery_analytics.py --report
-```
-*Output: `analysis_report.md`*
+**3. Set your Gemini API key (free tier available):**
 
-**"Show me aggregate insights on the console."**
-```bash
-python delivery_analytics.py --show_insights
+Get a free key at: https://aistudio.google.com/app/apikey
+
+PowerShell:
+```powershell
+$env:GEMINI_API_KEY = "AIza..."
 ```
 
-### 2. Specific Questions
-
-**Q1: "Why were deliveries delayed in city X yesterday?"**
-*Example: New Delhi*
+Bash / zsh:
 ```bash
-python delivery_analytics.py --filter_city "New Delhi"
+export GEMINI_API_KEY="AIza..."
 ```
 
-**Q2: "Why did Client X’s orders fail in the past week?"**
-*Example: Client Saini*
+> The system uses `gemini-2.5-flash` by default (available on Google AI Studio free tier).
+> Override the model with `$env:GEMINI_MODEL="gemini-2.0-flash"` or `gemini-2.5-flash-lite` if needed.
+
+---
+
+## Sample Use Cases (from the Assignment)
+
+### Use Case 1 – Deliveries delayed in a city
 ```bash
-python delivery_analytics.py --filter_client "Saini"
+python delivery_analytics.py --ask "Why were deliveries delayed in New Delhi yesterday?"
 ```
 
-**Q3: "Explain the top reasons for delivery failures linked to Warehouse B?"**
-*Example: Warehouse 1*
+### Use Case 2 – Client-specific failures
 ```bash
-python delivery_analytics.py --filter_warehouse "Warehouse 1"
+python delivery_analytics.py --ask "Why did Client Saini's orders fail in the past week?"
 ```
 
-**Q4: "Compare delivery failure causes between City A and City B?"**
-*Example: Mumbai vs New Delhi*
+### Use Case 3 – Warehouse root-cause analysis
+```bash
+python delivery_analytics.py --ask "Explain the top reasons for delivery failures linked to Warehouse 1 in August"
+```
+
+### Use Case 4 – City comparison
+```bash
+python delivery_analytics.py --ask "Compare delivery failure causes between Mumbai and New Delhi last month"
+```
+
+### Use Case 5 – Festival period analysis
+```bash
+python delivery_analytics.py --ask "What are the likely causes of delivery failures during festival periods and how should we prepare?"
+```
+
+### Use Case 6 – New client onboarding risk
+```bash
+python delivery_analytics.py --ask "If we onboard a new client with 20000 extra monthly orders, what failure risks should we expect and how do we mitigate them?"
+```
+
+---
+
+## All Available Commands
+
+### Ask anything in plain English (AI-powered)
+```bash
+python delivery_analytics.py --ask "<your question>"
+```
+The AI will detect the intent, apply the right filters, and return a narrative answer.
+
+### Filter by city
+```bash
+python delivery_analytics.py --filter_city "New Delhi" --show_insights
+```
+
+### Filter by client
+```bash
+python delivery_analytics.py --filter_client "Saini" --show_insights
+```
+
+### Filter by warehouse
+```bash
+python delivery_analytics.py --filter_warehouse "Warehouse 1" --show_insights
+```
+
+### Compare two cities
 ```bash
 python delivery_analytics.py --compare_cities "Mumbai" "New Delhi"
 ```
 
-**Q5/Q6: "What are likely causes of failure during festivals / If we onboard new clients?"**
-Use the global insights to find systemic patterns (e.g., Weather, Traffic, Specific Event Types).
-```bash
-python delivery_analytics.py --show_insights
-```
-*Look for "Event: Festival" or high failure rates under specific conditions.*
-
-### 3. Deep Dive into Specific Orders
-**"Why did this specific order fail?"**
-*Example: Order 123*
+### Analyse a specific order
 ```bash
 python delivery_analytics.py --query_order 123
 ```
 
-## Interpreting the Output
-The system generates a **Consolidated Reason** by checking multiple data sources:
-- **Fleet**: GPS Delay Notes (e.g., "Heavy congestion", "Address not found").
-- **Warehouse**: Internal Notes (e.g., "Stock delay").
-- **Weather**: Conditions (e.g., "Rain", "Fog").
-- **Traffic**: Conditions (e.g., "Heavy", "Jam").
-- **Customer**: Feedback text and sentiment.
+### Overall aggregate insights
+```bash
+python delivery_analytics.py --show_insights
+```
 
-If an order is **Late** or **Failed**, the system lists all identified negative factors.
+### Generate a full narrative report (saved to analysis_report.md)
+```bash
+python delivery_analytics.py --report
+```
+
+---
+
+## How the AI Works
+
+1. **Intent Detection** – Your question is sent to Gemini along with the list of all known
+   cities, clients, and warehouses in the dataset. The model returns a structured JSON object
+   identifying what you're asking about (city, client, warehouse, specific order, or general).
+
+2. **Data Filtering** – The system applies the detected filters to the unified DataFrame.
+
+3. **Narrative Generation** – A concise data summary (failure rates, top reasons, weather/traffic
+   breakdown) is sent back to Gemini. The model responds as a logistics analyst with:
+   - A direct answer in plain English
+   - Root causes ranked by severity with specific numbers
+   - 2–3 actionable recommendations
+
+---
+
+## Sample AI Output
+
+**Query:** `"Why were deliveries delayed in Mumbai last week?"`
+
+**Response (example):**
+> Mumbai experienced a notably high delivery failure and delay rate last week, with approximately
+> 38% of orders either failing or arriving late. The analysis points to three dominant root causes:
+>
+> **1. Fleet and Transit Issues (52% of failures)** – Heavy congestion on key routes (R2, R5) and
+> address-not-found incidents together account for the majority of delays. Route R2 alone shows a
+> 41% late-delivery rate.
+>
+> **2. Weather Conditions (31% of failures)** – Rain and fog conditions during the delivery window
+> significantly impacted last-mile performance. Orders during rainy days were 2× more likely to
+> be late.
+>
+> **3. Warehouse Dispatch Delays (17% of failures)** – Stock delays at Warehouse 3 caused late
+> dispatch for a cluster of orders, compounding transit delays.
+>
+> **Recommendations:**
+> - Deploy dynamic re-routing for drivers on R2 and R5 during peak hours.
+> - Implement weather-triggered SLA extensions and proactive customer notifications.
+> - Audit Warehouse 3 picking workflows to reduce pre-dispatch delays.
